@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<title>ORBIT</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Sidebar"></aside>
+  <div class="scrim-side" id="sideScrim"></div>
+  <div class="mainwrap">
+    <header class="topbar"><button class="iconbtn" id="menuBtn" aria-label="Open sidebar"></button><b id="topTitle">ORBIT</b><button class="iconbtn" id="searchBtn" aria-label="Search"></button></header>
+    <main id="app"><p class="muted">Loading…</p></main>
+  </div>
+</div>
+<button class="fab" id="fab" aria-label="Quick add">+</button>
+<nav class="tabs" id="nav">
+  <button data-v="today"><span data-ic="home"></span>Home</button>
+  <button data-v="courses"><span data-ic="grid"></span>Courses</button>
+  <button data-v="tasks"><span data-ic="tasks"></span>Tasks</button>
+  <button data-v="calendar"><span data-ic="cal"></span>Calendar</button>
+  <button data-v="menu"><span data-ic="side"></span>Pages</button>
+</nav>
+<div class="toast" id="toast"></div>
+<input type="file" id="importFile" accept="application/json" hidden>
+<input type="file" id="imgFile" accept="image/*" hidden>
+<script src="store.js"></script>
+<script src="draw.js"></script>
+<script src="notes.js"></script>
+<script src="quiz.js"></script>
+<script src="courses.js"></script>
+<script src="planner.js"></script>
+<script src="shell.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
