@@ -70,6 +70,7 @@ function snapShape(s) {
 }
 
 /* Open the drawing editor. data: {strokesId, bgId, paper, W, H}. onDone({pngId, strokesId, paper, W, H, w, h}) */
+const LOWEND = (navigator.deviceMemory && navigator.deviceMemory <= 3) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || /SM-T5|SM-T3|SM-P5|Android [5-9]\b/.test(navigator.userAgent);
 async function openDraw(data, onDone) {
   data = data || {};
   let strokes = [];
@@ -100,15 +101,15 @@ async function openDraw(data, onDone) {
       <div class="dcolors">${DCOLORS.map((c, i) => `<button class="sw ${i ? '' : 'on'}" data-c="${c}" style="background:${c}" aria-label="colour ${c}"></button>`).join('')}<label class="sw custom" aria-label="Custom colour"><input type="color" id="dCustom" value="#5856d6"></label></div>
     </div>`;
   document.body.appendChild(el);
-  document.body.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden'; document.body.classList.add('drawing'); if (LOWEND) el.classList.add('lowend');
   const base = $('#dBase', el), live = $('#dLive', el), stage = $('#dStage', el), layers = $('#dLayers', el), selBox = $('#dSel', el);
   const bx = base.getContext('2d', { alpha: false });
   const lx = live.getContext('2d');
   $('#dPaper', el).value = paper; if (bg) $('#dMore', el).style.display = 'none';
-  let scale = 1, dpr = 1, cur = null, drawn = 0, sel = null, holdT = null, lastMove = null;
+  let scale = 1, dpr = 1, cur = null, drawn = 0, sel = null, holdT = null, lastMove = null, raf = 0;
 
   function size() {
-    const cssW = Math.min(stage.clientWidth - 24, W); dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = Math.min(stage.clientWidth - 24, W); dpr = LOWEND ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     scale = cssW / W;
     for (const c of [base, live]) { c.style.width = cssW + 'px'; c.style.height = Math.round(H * scale) + 'px'; c.width = Math.round(cssW * dpr); c.height = Math.round(H * scale * dpr); }
     layers.style.width = cssW + 'px'; layers.style.height = Math.round(H * scale) + 'px';
@@ -119,25 +120,30 @@ async function openDraw(data, onDone) {
     paintPaper(bx, W, H, paper); if (bg) bx.drawImage(bg, 0, 0, W, H);
     for (const s of strokes) if (!skip || !skip.has(s)) paintStroke(bx, s);
   }
+  const showLive = on => { live.style.display = on ? 'block' : 'none'; };
   const clearLive = () => { lx.save(); lx.setTransform(1, 0, 0, 1, 0, 0); lx.clearRect(0, 0, live.width, live.height); lx.restore(); };
   const snap = () => { undo.push(strokes.slice()); if (undo.length > 100) undo.shift(); redo.length = 0; dirty = true; };
-  const pos = e => { const r = live.getBoundingClientRect(); return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale, e.pointerType === 'pen' ? (e.pressure || .5) : .5]; };
+  const pos = e => { const r = layers.getBoundingClientRect(); return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale, e.pointerType === 'pen' ? (e.pressure || .5) : .5]; };
 
   /* live painting — only what changed */
   function paintLive() {
     if (!cur) return;
     if (cur.t === 'pen' || cur.t === 'pencil') {
-      lx.save(); styleFor(lx, cur);
-      if (cur.p.length === 1 && drawn === 0) { lx.beginPath(); lx.arc(cur.p[0][0], cur.p[0][1], penW(cur, cur.p[0][2]) / 2, 0, 7); lx.fill(); drawn = 1; }
-      for (let i = Math.max(1, drawn); i < cur.p.length; i++) segPen(lx, cur, i);
-      drawn = cur.p.length; lx.restore();
-    } else { clearLive(); paintStroke(lx, cur); }
+      bx.save(); styleFor(bx, cur);
+      if (cur.p.length === 1 && drawn === 0) { bx.beginPath(); bx.arc(cur.p[0][0], cur.p[0][1], penW(cur, cur.p[0][2]) / 2, 0, 7); bx.fill(); drawn = 1; }
+      for (let i = Math.max(1, drawn); i < cur.p.length; i++) segPen(bx, cur, i);
+      drawn = cur.p.length; bx.restore();
+    } else { showLive(true); clearLive(); paintStroke(lx, cur); }
   }
-  function commit(s) { snap(); strokes.push(s); paintStroke(bx, s); clearLive(); }
+  function commit(s) { snap(); strokes.push(s); paintStroke(bx, s); clearLive(); showLive(false); }
+  function commitPen(s) { // already painted on the base while drawing; just add the tail
+    snap(); strokes.push(s);
+    const p = s.p; if (p.length > 1) { bx.save(); styleFor(bx, s); const a = p[p.length - 2], b = p[p.length - 1]; bx.lineWidth = penW(s, b[2]); bx.beginPath(); bx.moveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); bx.lineTo(b[0], b[1]); bx.stroke(); bx.restore(); }
+  }
   function eraseAt(pt) {
     const R = 12 / scale, hit = strokes.filter(s => { const b = bb(s); if (pt[0] < b[0] - R || pt[0] > b[2] + R || pt[1] < b[1] - R || pt[1] > b[3] + R) return false; return samplePts(s).some(q => Math.hypot(q[0] - pt[0], q[1] - pt[1]) < R + s.w / 2); });
     if (hit.length) { const h = new Set(hit); strokes = strokes.filter(s => !h.has(s)); renderBase(); }
-    clearLive(); lx.save(); lx.strokeStyle = 'rgba(0,0,0,.35)'; lx.lineWidth = 1 / scale; lx.beginPath(); lx.arc(pt[0], pt[1], R, 0, 7); lx.stroke(); lx.restore();
+    showLive(true); clearLive(); lx.save(); lx.strokeStyle = 'rgba(0,0,0,.35)'; lx.lineWidth = 1 / scale; lx.beginPath(); lx.arc(pt[0], pt[1], R, 0, 7); lx.stroke(); lx.restore();
   }
   /* lasso selection */
   function showSel() {
@@ -146,27 +152,27 @@ async function openDraw(data, onDone) {
     sel.box = [x0, y0, x1, y1]; selBox.hidden = false;
     Object.assign(selBox.style, { left: x0 * scale + 'px', top: y0 * scale + 'px', width: (x1 - x0) * scale + 'px', height: (y1 - y0) * scale + 'px' });
   }
-  function clearSel() { if (sel && sel.moving) return; sel = null; selBox.hidden = true; renderBase(); clearLive(); }
+  function clearSel() { if (sel && sel.moving) return; if (!sel) return; sel = null; selBox.hidden = true; clearLive(); showLive(false); }
 
   let erasing = false, lassoPath = null, dragFrom = null;
-  live.addEventListener('pointerdown', e => {
-    if (e.pointerType === 'pen' && !pencilOnly) { pencilOnly = true; $('#dPencil', el).classList.add('on'); live.style.touchAction = 'pan-x pan-y'; toast('Stylus detected — fingers scroll, the pen draws'); }
+  layers.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'pen' && !pencilOnly) { pencilOnly = true; $('#dPencil', el).classList.add('on'); layers.style.touchAction = 'pan-x pan-y'; toast('Stylus detected — fingers scroll, the pen draws'); }
     if (pencilOnly && e.pointerType === 'touch') return;
-    e.preventDefault(); try { live.setPointerCapture(e.pointerId); } catch (x) { }
+    e.preventDefault(); try { layers.setPointerCapture(e.pointerId); } catch (x) { }
     const pt = pos(e);
     if (sel && sel.box && tool === 'lasso' && pt[0] >= sel.box[0] && pt[0] <= sel.box[2] && pt[1] >= sel.box[1] && pt[1] <= sel.box[3]) {
       snap(); sel.items = sel.items.map(s => { const c = JSON.parse(JSON.stringify(s)); strokes[strokes.indexOf(s)] = c; return c; });
-      dragFrom = pt; sel.moving = true; renderBase(new Set(sel.items)); clearLive(); sel.items.forEach(s => paintStroke(lx, s)); return;
+      dragFrom = pt; sel.moving = true; renderBase(new Set(sel.items)); showLive(true); clearLive(); sel.items.forEach(s => paintStroke(lx, s)); return;
     }
     if (sel) clearSel();
     if (tool === 'text') { textAt(e.clientX, e.clientY, pt); return; }
     if (tool === 'eraser') { snap(); erasing = true; eraseAt(pt); return; }
-    if (tool === 'lasso') { lassoPath = [pt]; return; }
+    if (tool === 'lasso') { lassoPath = [pt]; showLive(true); return; }
     const t = tool === 'shape' ? shape : tool;
     cur = { t, c: color, w: t === 'hl' ? width + 2 : width, p: (t === 'pen' || t === 'pencil' || t === 'hl') ? [pt] : [pt, pt.slice()] };
     drawn = 0; clearLive(); paintLive(); lastMove = pt; armHold();
   });
-  live.addEventListener('pointermove', e => {
+  layers.addEventListener('pointermove', e => {
     if (pencilOnly && e.pointerType === 'touch') return;
     if (erasing) { eraseAt(pos(e)); return; }
     if (dragFrom && sel) { const pt = pos(e), dx = pt[0] - dragFrom[0], dy = pt[1] - dragFrom[1]; dragFrom = pt; sel.items.forEach(s => { s.p.forEach(q => { q[0] += dx; q[1] += dy; }); BB.delete(s); }); clearLive(); sel.items.forEach(s => paintStroke(lx, s)); showSel(); return; }
@@ -176,18 +182,20 @@ async function openDraw(data, onDone) {
     if (cur.t === 'pen' || cur.t === 'pencil' || cur.t === 'hl') { for (const ev of evs) { const q = pos(ev), l = cur.p[cur.p.length - 1]; if (Math.hypot(q[0] - l[0], q[1] - l[1]) > .6) cur.p.push(q); } }
     else cur.p[1] = pos(e);
     const q = cur.p[cur.p.length - 1]; if (Math.hypot(q[0] - lastMove[0], q[1] - lastMove[1]) > 4 / scale) { lastMove = q; armHold(); }
-    paintLive();
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintLive(); });
   });
-  function armHold() { clearTimeout(holdT); if (!cur || (cur.t !== 'pen' && cur.t !== 'pencil')) return; holdT = setTimeout(() => { if (!cur) return; const sh = snapShape(cur); if (sh) { cur = sh; drawn = 0; clearLive(); paintStroke(lx, cur); } }, 600); }
+  function armHold() { clearTimeout(holdT); if (!cur || (cur.t !== 'pen' && cur.t !== 'pencil')) return; holdT = setTimeout(() => { if (!cur) return; const sh = snapShape(cur); if (sh) { cur = sh; drawn = 0; renderBase(); showLive(true); clearLive(); paintStroke(lx, cur); } }, 600); }
   const end = () => {
     clearTimeout(holdT);
-    if (erasing) { erasing = false; clearLive(); return; }
-    if (dragFrom && sel) { dragFrom = null; sel.moving = false; renderBase(); clearLive(); showSel(); return; }
-    if (lassoPath) { const poly = lassoPath; lassoPath = null; clearLive(); if (poly.length > 3) { const items = strokes.filter(s => samplePts(s).some(q => inPoly(q, poly))); if (items.length) { sel = { items }; showSel(); lx.save(); lx.globalAlpha = .5; items.forEach(s => paintStroke(lx, s)); lx.restore(); } } return; }
+    if (erasing) { erasing = false; clearLive(); showLive(false); return; }
+    if (dragFrom && sel) { dragFrom = null; sel.moving = false; renderBase(); clearLive(); showLive(false); showSel(); return; }
+    if (lassoPath) { const poly = lassoPath; lassoPath = null; clearLive(); if (poly.length > 3) { const items = strokes.filter(s => samplePts(s).some(q => inPoly(q, poly))); if (items.length) { sel = { items }; showSel(); } } showLive(false); return; }
     if (!cur) return;
-    const s = cur; cur = null; drawn = 0; commit(s);
+    if (raf) { cancelAnimationFrame(raf); raf = 0; paintLive(); }
+    const s = cur; cur = null; drawn = 0;
+    if (s.t === 'pen' || s.t === 'pencil') commitPen(s); else commit(s);
   };
-  live.addEventListener('pointerup', end); live.addEventListener('pointercancel', end);
+  layers.addEventListener('pointerup', end); layers.addEventListener('pointercancel', end);
   $('#dSelDel', el).onclick = () => { if (!sel) return; snap(); const h = new Set(sel.items); strokes = strokes.filter(s => !h.has(s)); sel = null; selBox.hidden = true; renderBase(); clearLive(); };
 
   function textAt(cx, cy, pt) {
@@ -215,11 +223,12 @@ async function openDraw(data, onDone) {
   $('#dRedo', el).onclick = () => { if (!redo.length) return; undo.push(strokes.slice()); strokes = redo.pop(); clearSel(); renderBase(); };
   $('#dPaper', el).onchange = e => { paper = e.target.value; dirty = true; renderBase(); };
   $('#dMore', el).onclick = () => { H += 700; dirty = true; size(); stage.scrollTop = stage.scrollHeight; };
-  $('#dPencil', el).onclick = () => { pencilOnly = !pencilOnly; $('#dPencil', el).classList.toggle('on', pencilOnly); live.style.touchAction = pencilOnly ? 'pan-x pan-y' : 'none'; };
+  $('#dPencil', el).onclick = () => { pencilOnly = !pencilOnly; $('#dPencil', el).classList.toggle('on', pencilOnly); layers.style.touchAction = pencilOnly ? 'pan-x pan-y' : 'none'; };
+  showLive(false);
   let rt; const ro = new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(size, 60); }); ro.observe(stage); size();
   const keys = e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); (e.shiftKey ? $('#dRedo', el) : $('#dUndo', el)).click(); } if ((e.key === 'Delete' || e.key === 'Backspace') && sel && !e.target.closest('textarea')) $('#dSelDel', el).click(); };
   document.addEventListener('keydown', keys);
-  const close = () => { ro.disconnect(); document.removeEventListener('keydown', keys); el.remove(); document.body.style.overflow = ''; };
+  const close = () => { ro.disconnect(); document.removeEventListener('keydown', keys); el.remove(); document.body.style.overflow = ''; document.body.classList.remove('drawing'); };
   $('#dCancel', el).onclick = () => { if (dirty && !el._sure) { el._sure = 1; toast('Tap Cancel again to discard changes'); return; } close(); };
   $('#dDone', el).onclick = async () => {
     const out = document.createElement('canvas'), k = Math.min(1, 2000 / W);

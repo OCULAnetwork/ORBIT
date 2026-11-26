@@ -429,3 +429,10 @@ main.notesmode{max-width:none;padding:0}
 .onbfoot{width:min(560px,100%);margin-top:28px;display:grid;gap:10px}
 .dots{display:flex;gap:8px;justify-content:center}.dots i{width:8px;height:8px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--fill)}
 .obback{background:none;color:var(--blue)}
+
+/* drawing performance: no blur or shadows over the canvas, app hidden underneath */
+body.drawing .shell,body.drawing nav.tabs,body.drawing .fab{display:none!important}
+.draw .dtop,.draw .dpalette{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:var(--card)}
+.dlayers{box-shadow:none!important;border-radius:0!important;overflow:visible!important;outline:1px solid var(--line);touch-action:none}
+.dlayers canvas{pointer-events:none}
+.draw.lowend .dpalette{box-shadow:none;border:1px solid var(--line)}
