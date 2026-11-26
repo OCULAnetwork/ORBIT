@@ -5,7 +5,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const dkey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const today = () => dkey(new Date());
-const PALETTE = ['#30a8bf', '#5856d6', '#f08a00', '#af52de', '#ff2d55', '#34c759', '#007aff', '#a2845e', '#5ac8fa', '#ff9500'];
+const PALETTE = ['#5e5ce6', '#30b0c7', '#34c759', '#bf5af2', '#0a84ff', '#ff375f', '#64d2ff', '#a2845e', '#ffb340', '#8e8e93'];
 const course = id => (S && S.courses ? S.courses.find(c => c.id === id) : null);
 const courseName = id => (course(id) || {}).name || 'General';
 const modOf = (cid, mid) => { const c = course(cid); return c ? c.modules.find(m => m.id === mid) : null; };

@@ -164,10 +164,10 @@ hi:[
 
 /* ===== courses + modules ===== */
 const DEFAULT_COURSES = [
-  { id: 'nclex', name: 'NCLEX-RN', icon: '🩺', color: '#5856d6', modules: ['Fundamentals', 'Pharmacology', 'Labs & Values', 'Med-Surg', 'Maternity', 'Pediatrics', 'Mental Health', 'Leadership & Delegation', 'Safety & Infection', 'NGN Case Studies'] },
-  { id: 'oph', name: 'Ophthalmology', icon: '👁️', color: '#30a8bf', modules: ['Anatomy & Physiology', 'Diseases', 'Medications', 'Procedures & Surgery', 'Devices & Instruments', 'Sterilization & Infection', 'Quality & Workflow', 'Tricks & Pearls'] },
-  { id: 'eng', name: 'English', icon: '🗣️', color: '#f08a00', modules: ['Vocabulary', 'Grammar', 'Stories & Reading', 'Listening', 'Speaking', 'Writing', 'Medical English'] },
-  { id: 'hi', name: 'Health Informatics & AI', icon: '🤖', color: '#af52de', modules: ['Foundations', 'Data Standards', 'Python', 'Machine Learning', 'AI in Healthcare', 'Projects'] }];
+  { id: 'nclex', name: 'NCLEX-RN', icon: '🩺', color: '#5e5ce6', modules: ['Fundamentals', 'Pharmacology', 'Labs & Values', 'Med-Surg', 'Maternity', 'Pediatrics', 'Mental Health', 'Leadership & Delegation', 'Safety & Infection', 'NGN Case Studies'] },
+  { id: 'oph', name: 'Ophthalmology', icon: '👁️', color: '#30b0c7', modules: ['Anatomy & Physiology', 'Diseases', 'Medications', 'Procedures & Surgery', 'Devices & Instruments', 'Sterilization & Infection', 'Quality & Workflow', 'Tricks & Pearls'] },
+  { id: 'eng', name: 'English', icon: '🗣️', color: '#34c759', modules: ['Vocabulary', 'Grammar', 'Stories & Reading', 'Listening', 'Speaking', 'Writing', 'Medical English'] },
+  { id: 'hi', name: 'Health Informatics & AI', icon: '🤖', color: '#bf5af2', modules: ['Foundations', 'Data Standards', 'Python', 'Machine Learning', 'AI in Healthcare', 'Projects'] }];
 function makeCourses() { return DEFAULT_COURSES.map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color, modules: c.modules.map(n => ({ id: 'm' + uid(), name: n })) })); }
 const MOD_RULES = {
   oph: [[/cap color|latanoprost|timolol|brimonidine|prednisolone|anesthetic|punctal|drops|atropine|anti-vegf|fluorescein|drug/i, 'Medications'], [/tass|spaulding|tonometer|steril/i, 'Sterilization & Infection'], [/time-out/i, 'Quality & Workflow'], [/gas bubble|vitrectomy|surgery|cataract|preference/i, 'Procedures & Surgery'], [/iop range|anatomy/i, 'Anatomy & Physiology'], [/./, 'Diseases']],

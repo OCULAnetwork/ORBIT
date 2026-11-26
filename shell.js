@@ -8,7 +8,7 @@ function openDrawer() { document.body.classList.add('drawer'); }
 function closeDrawer() { document.body.classList.remove('drawer'); }
 
 const NAV_MAIN = [['today', 'home', 'Home'], ['calendar', 'cal', 'Calendar'], ['tasks', 'tasks', 'Tasks'], ['courses', 'grid', 'Courses'], ['cards', 'cards', 'Flashcards']];
-const NAV_FOOT = [['plan', 'map', 'Study plan'], ['progress', 'gear', 'Progress & settings'], ['trash', 'trash', 'Trash']];
+const NAV_FOOT = [['plan', 'map', 'Plans'], ['progress', 'gear', 'Progress & settings'], ['trash', 'trash', 'Trash']];
 function renderSidebar() {
   const sb = $('#sidebar'); if (!sb || !S) return;
   const open = S.tasks.filter(t => !t.done && t.due && t.due <= today()).length, tr = (S.trash || []).length;
@@ -27,7 +27,7 @@ function renderSidebar() {
   const sc = sb.querySelector('.sbscroll'); sc.scrollTop = top;
   sb.onclick = sideClick;
   $$('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === view || (b.dataset.v === 'courses' && (view === 'course' || view === 'cards'))));
-  const tt = $('#topTitle'); if (tt) tt.textContent = view === 'notes' && pageById(curPage) ? (pageById(curPage).title || 'Untitled') : view === 'course' && course(curCourse) ? course(curCourse).name : ({ today: 'Home', calendar: 'Calendar', tasks: 'Tasks', courses: 'Courses', cards: 'Flashcards', plan: 'Study plan', progress: 'Progress', trash: 'Trash' }[view] || 'ORBIT');
+  const tt = $('#topTitle'); if (tt) tt.textContent = view === 'notes' && pageById(curPage) ? (pageById(curPage).title || 'Untitled') : view === 'course' && course(curCourse) ? course(curCourse).name : ({ today: 'Home', calendar: 'Calendar', tasks: 'Tasks', courses: 'Courses', cards: 'Flashcards', plan: 'Plans', progress: 'Progress', trash: 'Trash' }[view] || 'ORBIT');
 }
 function pageRowHTML(p, d) {
   const ex = S.settings.expanded, ks = kids(p.id), open = ks.length && (ex[p.id] ?? crumbsOf(pageById(curPage) || {}).some(c => c.id === p.id));

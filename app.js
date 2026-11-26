@@ -26,12 +26,13 @@ function seedCards() { const out = []; for (const tr in SEED) for (const [f, b] 
 async function init() {
   try { DBH = await idbOpen(); } catch (e) { STORE = 'memory'; }
   try { S = STORE === 'idb' ? await kvGet('state') : null; } catch (e) { STORE = 'memory'; }
-  if (!S) { let old = null; try { old = JSON.parse(localStorage.getItem('studyos_v1')); } catch (e) { } S = old || { v: 1, cards: seedCards(), inbox: [], errors: [], blocks: [], logs: {}, settings: { newPerDay: 12, maxRev: 60, start: today(), easy: false } }; }
+  if (!S) { let old = null; try { old = JSON.parse(localStorage.getItem('studyos_v1')); } catch (e) { } S = old || freshState(); }
   upgrade();
   await save(true);
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
   go(location.hash.slice(1) || 'today');
+  if (!S.settings.onboarded) onboarding();
 }
 function upgrade() {
   S.inbox = S.inbox || []; S.errors = S.errors || []; S.blocks = S.blocks || []; S.logs = S.logs || {}; S.quizzes = S.quizzes || [];
@@ -45,7 +46,16 @@ function upgrade() {
   if (!S.pages) seedPages(); else migratePages();
   S.tasks = S.tasks || []; S.events = S.events || []; S.trash = S.trash || [];
   if (S.v < 4 && !S.tasks.length) { newTask({ title: 'Do today\'s card review', due: today(), course: null, prio: 1 }); newTask({ title: 'Write one ophthalmology lesson note', due: today(), course: 'oph' }); newTask({ title: 'Export a backup', due: addDays(today(), (5 - new Date().getDay() + 7) % 7 || 7), course: null }); }
-  S.v = 4;
+  if (!S.plans) {
+    S.plans = [];
+    const has = id => S.courses.some(c => c.id === id);
+    if (has('nclex')) S.plans.push(makePlan('nclex', '2026-11-22'));
+    if (has('oph')) S.plans.push(makePlan('oph', S.settings.start));
+    if (has('hi')) S.plans.push(makePlan('hi', S.settings.start));
+    if (has('eng')) S.plans.push(makePlan('eng', S.settings.start));
+  }
+  if (S.v < 6 && S.settings.onboarded === undefined) S.settings.onboarded = true;
+  S.v = Math.max(S.v, 6);
   applyTheme();
 }
 
@@ -77,22 +87,22 @@ const trackOpts = sel => courseOpts(sel);
 /* ===== Today ===== */
 V.today = () => {
   app.className = 'wide';
-  const { rev, nw } = dueCards(), L = log(), plan = todayTasks().filter(t => !t.auto), easy = S.settings.easy, n = rev.length + nw.length, t0 = today();
+  const { rev, nw } = dueCards(), L = log(), plan = todayPlanItems(), easy = S.settings.easy, n = rev.length + nw.length, t0 = today();
   const myTasks = S.tasks.filter(t => !t.done && t.due && t.due <= t0).sort((a, b) => (b.prio || 0) - (a.prio || 0));
   const evs = S.events.filter(e => e.date === t0).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   const cont = S.courses.map(c => ({ c, pr: courseProgress(c.id) })).filter(x => x.pr.next);
   const recent = [...S.pages].sort((a, b) => b.updated - a.updated).slice(0, 5);
   const hr = new Date().getHours(), hello = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
   app.innerHTML = `
-  <div class="hhead"><div><p class="sub">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>${hello}, Karim</h1></div><button id="themeBtn" aria-label="Theme">${'Theme: ' + { auto: 'Auto', light: 'Light', dark: 'Dark' }[S.settings.theme || 'auto']}</button></div>
+  <div class="hhead"><div><p class="sub">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>${hello}${S.settings.name ? ', ' + esc(S.settings.name) : ''}</h1></div><button id="themeBtn" aria-label="Theme">${'Theme: ' + { auto: 'Auto', light: 'Light', dark: 'Dark' }[S.settings.theme || 'auto']}</button></div>
   <div class="homegrid">
    <div class="hcol">
     <div class="hero group pad"><div class="row" style="flex-wrap:nowrap;align-items:center"><div style="flex:1 1 auto"><b style="font-size:20px">${n ? n + ' cards ready' : 'All caught up ✓'}</b><br><small class="muted">${streak()} day streak · ${L.reviews + L.news} done today</small></div><span style="flex:0 0 auto;color:var(--blue)">${I('cards', 'big')}</span></div>
       <button class="btn-blue big" id="start" style="margin-top:12px" ${n ? '' : 'disabled'}>${n ? 'Start review' : 'Nothing due'}</button>
       <button id="easy" style="width:100%;margin-top:8px">${easy ? 'Hard-day mode ON · tap to turn off' : 'Hard day? 5-minute mode'}</button></div>
     ${cont.length ? `<h2>Continue learning</h2><div class="contgrid">${cont.slice(0, 4).map(({ c, pr }) => `<button class="cont" data-lesson="${pr.next.id}" style="--cc:${c.color}"><span class="cicon">${c.icon}</span><span class="grow"><small class="muted">${esc(c.name)}</small><br><b>${esc(pr.next.title || 'Untitled')}</b><span class="bar" style="display:block;margin-top:8px"><i style="width:${Math.round(pr.done / pr.total * 100)}%;background:${c.color}"></i></span></span>${I('play')}</button>`).join('')}</div>` : ''}
-    <h2>Today's study plan</h2>
-    <div class="group">${(easy ? plan.slice(0, 1) : plan).map(t => { const done = !!L.tasks[t.id]; return `<div class="task ${done ? 'done' : ''}"><input type="checkbox" data-t="${t.id}" ${done ? 'checked' : ''} aria-label="${esc(t.t)}"><div class="txt">${tag(t.tr)}<br><b>${esc(t.t)}</b><small>${esc(t.d)}</small></div></div>`; }).join('')}</div>
+    <h2 class="h2row"><span>Today's study plan</span><button class="iconbtn" id="hPlans" aria-label="Edit plans">${I('pencil')}</button></h2>
+    <div class="group">${plan.length ? (easy ? plan.slice(0, 1) : plan).map(({ p, n }) => { const id = 'pl:' + p.id, done = !!L.tasks[id]; return `<div class="task ${done ? 'done' : ''}"><input type="checkbox" data-t="${id}" ${done ? 'checked' : ''} aria-label="${esc(n.step.title)}"><div class="txt">${p.course ? tag(p.course) : ''} <small style="display:inline">${esc(p.name)} · ${esc(n.label)}</small><br><b>${esc(n.step.title)}</b><small>${esc(n.step.detail)}</small></div></div>`; }).join('') : `<div class="cell muted">No active plans. <button id="hNewPlan">Create a plan</button></div>`}</div>
    </div>
    <div class="hcol">
     <h2 class="h2row" style="margin-top:4px"><span>Today</span><button class="iconbtn" id="hAddTask" aria-label="Add task">${I('plus')}</button></h2>
@@ -112,6 +122,8 @@ V.today = () => {
   $$('[data-lesson]').forEach(b => b.onclick = () => openPage(b.dataset.lesson));
   $$('[data-t]').forEach(cb => cb.onchange = () => { const L = log(); if (cb.checked) L.tasks[cb.dataset.t] = 1; else delete L.tasks[cb.dataset.t]; save(); cb.closest('.task').classList.toggle('done', cb.checked); });
   $('#hAddTask').onclick = () => taskSheet(null, V.today);
+  $('#hPlans').onclick = () => go('plan');
+  const hn = $('#hNewPlan'); if (hn) hn.onclick = () => newPlanSheet();
   $('#hqa').onsubmit = e => { e.preventDefault(); const v = $('#hqaIn').value.trim(); if (!v) return; const q = parseQuick(v); newTask({ title: q.title || v, due: q.due || today() }); save(); V.today(); renderSidebar(); };
   bindTasks(app, () => { V.today(); renderSidebar(); });
   $$('[data-ev]').forEach(r => r.onclick = () => eventSheet(S.events.find(x => x.id === r.dataset.ev), V.today));
@@ -229,20 +241,6 @@ $('#fab').onclick = () => {
   });
 };
 
-/* ===== Plan ===== */
-V.plan = () => {
-  const n = nclexToday(), w = wk(12);
-  const list = (arr, i0) => arr.map((o, i) => `<div class="task ${i < i0 ? 'done' : ''}"><div class="txt"><b>${i === i0 ? '▶ ' : ''}Week ${i + 1}: ${esc(o[0])}</b><small>${esc(o[1])}</small></div></div>`).join('');
-  app.innerHTML = `<h1>Plan</h1><p class="sub">You only need today's step. This is the map.</p>
-  <h2>${tag('nclex')} NCLEX-RN · exam Nov–Dec 2027</h2>
-  <div class="group"><div class="task"><div class="txt"><b>Now: ${esc(n.phase)}</b><small>${esc(n.detail)}</small></div></div>
-   ${[['Phase 0 · Setup', '22 Nov – 31 Dec 2026'], ['Phase 1 · Foundation', 'Jan – Mar 2027'], ['Phase 2 · System review', 'Apr – Jul 2027'], ['Phase 3 · Question bank', 'Aug – mid-Oct 2027'], ['Phase 4 · Final readiness', 'mid-Oct – exam']].map(p => `<div class="task"><div class="txt"><b style="${n.phase.startsWith(p[0].split(' ·')[0]) ? 'color:var(--blue)' : ''}">${p[0]}</b><small>${p[1]}</small></div></div>`).join('')}</div>
-  <h2>${tag('oph')} Ophthalmology · 12 weeks</h2><div class="group">${list(OPH, w)}</div>
-  <h2>${tag('hi')} Health Informatics & AI · 12 weeks</h2><div class="group">${list(HI, w)}</div>
-  <h2>${tag('eng')} English · weekly rhythm</h2><div class="group">${ENG.map((e, i) => `<div class="task"><div class="txt"><b style="${i === new Date().getDay() ? 'color:var(--blue)' : ''}">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}: ${esc(e[0])}</b><small>${esc(e[1])}</small></div></div>`).join('')}</div>
-  <p class="sub">Goal: IELTS 6.5–7 / OET B by Sep 2027.</p>`;
-};
-
 /* ===== Progress + settings ===== */
 V.progress = () => {
   const days = []; for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const l = S.logs[dkey(d)]; days.push({ k: dkey(d), v: l ? l.reviews + l.news : 0 }); }
@@ -259,16 +257,18 @@ V.progress = () => {
   <p class="sub">"Strong" = remembered for 3+ weeks.</p>
   ${S.errors.length ? `<h2>Why I miss NCLEX questions</h2><div class="group">${Object.entries(why).map(([k, v]) => `<div class="cell"><span class="grow">${esc(k)}</span><b>${v}</b></div>`).join('')}</div>` : ''}
   <h2>Settings</h2><div class="group pad">
+   <label for="sName">Your name</label><input id="sName" value="${esc(S.settings.name || '')}" dir="auto">
    <label>Appearance</label><div class="seg" id="sTheme">${[['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(t => `<button data-th="${t[0]}" class="${(S.settings.theme || 'auto') === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
    <div class="row"><div><label for="sN">New cards / day</label><input id="sN" type="number" min="0" value="${S.settings.newPerDay}"></div><div><label for="sR">Max reviews / day</label><input id="sR" type="number" min="5" value="${S.settings.maxRev}"></div></div>
-   <label for="sD">Ophthalmology & Informatics plan start</label><input id="sD" type="date" value="${S.settings.start}">
    <button class="btn-blue" id="sSave" style="width:100%;margin-top:12px">Save settings</button></div>
   <h2>Backup</h2><div class="group pad">
    <p style="margin:0 0 10px">Everything (notes, drawings, images, cards) lives only on this tablet${STORE === 'memory' ? ' — <b class="danger">storage is blocked here, export now</b>' : ''}. Export every Friday to Google Drive.</p>
    <div class="row"><button id="exp" class="btn-blue">Export backup</button><button id="imp">Import backup</button></div>
-   <small class="muted" id="expInfo"></small></div>`;
-  $('#sSave').onclick = () => { S.settings.newPerDay = Math.max(0, +$('#sN').value || 0); S.settings.maxRev = Math.max(5, +$('#sR').value || 60); S.settings.start = $('#sD').value || S.settings.start; save(); toast('Saved'); };
+   <small class="muted" id="expInfo"></small></div>
+  <h2>Danger zone</h2><div class="group pad"><p style="margin:0 0 10px">Start over with a completely empty ORBIT, like a newly installed app.</p><button class="danger" id="erase" style="width:100%">${I('trash')} Erase all data…</button></div>`;
+  $('#sSave').onclick = () => { S.settings.newPerDay = Math.max(0, +$('#sN').value || 0); S.settings.maxRev = Math.max(5, +$('#sR').value || 60); S.settings.name = $('#sName').value.trim(); save(); toast('Saved'); };
   $('#exp').onclick = exportData;
+  $('#erase').onclick = eraseSheet;
   $('#sTheme').onclick = e => { const b = e.target.closest('[data-th]'); if (!b) return; S.settings.theme = b.dataset.th; applyTheme(); save(); V.progress(); };
   $('#imp').onclick = () => $('#importFile').click();
 };
